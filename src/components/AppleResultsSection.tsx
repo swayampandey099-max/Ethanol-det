@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { PetrolVehicle } from '../data/vehicles';
 import { AnalysisData } from './AiAnalysisResults';
+import { calculateDedicatedVehicleFuelMetrics } from '../utils/fuelPhysics';
 import {
   ShieldCheck,
   AlertTriangle,
@@ -15,6 +16,10 @@ import {
   Printer,
   RotateCw,
   FileText,
+  Flame,
+  Zap,
+  TrendingDown,
+  Coins,
 } from 'lucide-react';
 
 interface AppleResultsSectionProps {
@@ -42,6 +47,9 @@ export const AppleResultsSection: React.FC<AppleResultsSectionProps> = ({
   const isCaution = analysis.suitabilityVerdict === 'CONDITIONAL_CAUTION';
   const isHazard = analysis.suitabilityVerdict === 'INCOMPATIBLE_HAZARD';
 
+  // Dedicated exact metrics for the chosen ethanol level
+  const dedicated = analysis.dedicatedMetrics || calculateDedicatedVehicleFuelMetrics(vehicle, ethanolPct);
+
   return (
     <section className="glass-panel rounded-3xl p-6 sm:p-8 transition-all relative overflow-hidden space-y-6">
       {/* Smooth non-flicker subtle loading bar when testing updates */}
@@ -65,17 +73,21 @@ export const AppleResultsSection: React.FC<AppleResultsSectionProps> = ({
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/70 pb-5 relative z-10">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">
-              Step 3 · Test Results
+          <div className="flex flex-wrap items-center gap-2 mb-1">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200">
+              Dedicated E{ethanolPct} Result
             </span>
             <span className="text-xs text-slate-400">·</span>
-            <span className="text-xs text-slate-600 font-medium">
-              Powertrain Fuel Compatibility Analysis
+            <span className="text-xs text-slate-700 font-semibold">
+              {ethanolPct}% Ethanol + {100 - ethanolPct}% Petrol
+            </span>
+            <span className="text-xs text-slate-400">·</span>
+            <span className="text-xs text-slate-500 font-medium">
+              {vehicle.make} {vehicle.model}
             </span>
           </div>
           <h2 className="text-2xl font-bold tracking-tight text-slate-900">
-            Engine Health & Fuel Compatibility
+            Engine Health & Dedicated Fuel Compatibility
           </h2>
         </div>
 
@@ -123,7 +135,7 @@ export const AppleResultsSection: React.FC<AppleResultsSectionProps> = ({
       >
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-5">
           <div className="space-y-2 max-w-2xl">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span
                 className={`text-xs font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full ${
                   isCompatible
@@ -133,7 +145,10 @@ export const AppleResultsSection: React.FC<AppleResultsSectionProps> = ({
                     : 'bg-rose-100 text-rose-800'
                 }`}
               >
-                {isCompatible ? 'Safe to Use' : isCaution ? 'Use with Caution' : 'Not Recommended'}
+                {isCompatible ? `Safe for E${ethanolPct}` : isCaution ? `Use E${ethanolPct} with Caution` : `E${ethanolPct} Not Recommended`}
+              </span>
+              <span className="text-xs font-semibold text-slate-600 bg-white/80 px-2.5 py-0.5 rounded-full border border-slate-200">
+                {dedicated.statusLabel}
               </span>
             </div>
 
@@ -187,7 +202,7 @@ export const AppleResultsSection: React.FC<AppleResultsSectionProps> = ({
           <CheckCircle2 className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
           <div>
             <span className="font-bold text-slate-900 block">
-              Driver Recommendation:
+              Driver Recommendation for E{ethanolPct}:
             </span>
             <p className="text-slate-600 mt-0.5 leading-relaxed font-medium">
               {analysis.recommendedAction}
@@ -196,46 +211,153 @@ export const AppleResultsSection: React.FC<AppleResultsSectionProps> = ({
         </div>
       </div>
 
-      {/* Fuel Mileage & Consumption Impact Card */}
+      {/* DEDICATED EXACT METRICS DASHBOARD (6 EXACT VALUES, NO RANGES) */}
       <div className="glass-panel-subtle rounded-2xl p-6 border border-white/80 space-y-4">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center">
-            <Gauge className="w-4 h-4" />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center">
+              <Gauge className="w-4 h-4" />
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-slate-900">
+                Dedicated E{ethanolPct} Performance & Mileage Diagnostics
+              </h4>
+              <p className="text-xs text-slate-500">
+                Exact physics calculations specifically for {vehicle.make} {vehicle.model}
+              </p>
+            </div>
           </div>
-          <div>
-            <h4 className="text-sm font-bold text-slate-900">
-              Mileage & Driving Range Impact
-            </h4>
-            <p className="text-xs text-slate-500">
-              Calculated from fuel volumetric energy density comparison
-            </p>
+
+          <span className="hidden sm:inline-flex text-[11px] font-mono font-semibold px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+            Dedicated Readout
+          </span>
+        </div>
+
+        {/* 6 Exact Dedicated Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+          {/* Card 1: Exact Mileage Drop */}
+          <div className="bg-white/95 p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col justify-between">
+            <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+              <span className="font-semibold uppercase tracking-wider text-[11px]">Exact Mileage Change</span>
+              <TrendingDown className="w-4 h-4 text-rose-500" />
+            </div>
+            <div className="my-1">
+              <div className="text-3xl font-extrabold font-mono text-slate-900">
+                {dedicated.exactMileageDropPct}%
+              </div>
+              <div className="text-[11px] text-slate-500 font-medium mt-0.5">
+                Exact drop vs pure E0 petrol
+              </div>
+            </div>
+            <div className="text-[11px] text-slate-400 border-t border-slate-100 pt-1.5 mt-1">
+              Pure petrol has 32.4 MJ/L vs {dedicated.exactEnergyDensityMjL} MJ/L
+            </div>
+          </div>
+
+          {/* Card 2: Real-World Mileage in km/L */}
+          <div className="bg-white/95 p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col justify-between">
+            <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+              <span className="font-semibold uppercase tracking-wider text-[11px]">Real-World Efficiency</span>
+              <Droplets className="w-4 h-4 text-blue-500" />
+            </div>
+            <div className="my-1">
+              <div className="text-3xl font-extrabold font-mono text-blue-600">
+                {dedicated.exactMileageOnBlendKmpl} <span className="text-base font-bold text-slate-600">km/L</span>
+              </div>
+              <div className="text-[11px] text-slate-600 font-medium mt-0.5">
+                Drops from <span className="font-bold">{dedicated.baselineMileageKmpl} km/L</span> (-{dedicated.exactKmDropPerLiter} km/L)
+              </div>
+            </div>
+            <div className="text-[11px] text-slate-400 border-t border-slate-100 pt-1.5 mt-1">
+              Calibrated to {vehicle.model} factory rating
+            </div>
+          </div>
+
+          {/* Card 3: Full Tank Driving Range */}
+          <div className="bg-white/95 p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col justify-between">
+            <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+              <span className="font-semibold uppercase tracking-wider text-[11px]">Full Tank Range</span>
+              <Fuel className="w-4 h-4 text-indigo-500" />
+            </div>
+            <div className="my-1">
+              <div className="text-3xl font-extrabold font-mono text-slate-900">
+                {dedicated.exactRangeOnBlendKm} <span className="text-base font-bold text-slate-600">km</span>
+              </div>
+              <div className="text-[11px] text-slate-600 font-medium mt-0.5">
+                Range loss of <strong className="text-rose-600">-{dedicated.exactRangeLossKm} km</strong> per full tank
+              </div>
+            </div>
+            <div className="text-[11px] text-slate-400 border-t border-slate-100 pt-1.5 mt-1">
+              Based on {vehicle.tankCapacityLiters}L fuel tank capacity
+            </div>
+          </div>
+
+          {/* Card 4: Dedicated Blended Octane (RON) */}
+          <div className="bg-white/95 p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col justify-between">
+            <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+              <span className="font-semibold uppercase tracking-wider text-[11px]">Octane Rating (RON)</span>
+              <Flame className="w-4 h-4 text-amber-500" />
+            </div>
+            <div className="my-1">
+              <div className="text-3xl font-extrabold font-mono text-slate-900">
+                {dedicated.exactOctaneRatingRon} <span className="text-base font-bold text-slate-600">RON</span>
+              </div>
+              <div className="text-[11px] text-slate-600 font-medium mt-0.5">
+                Anti-knock resistance vs base 91 RON
+              </div>
+            </div>
+            <div className="text-[11px] text-slate-400 border-t border-slate-100 pt-1.5 mt-1">
+              Higher octane prevents pre-ignition knock
+            </div>
+          </div>
+
+          {/* Card 5: Stoichiometric Air-Fuel Ratio (AFR) */}
+          <div className="bg-white/95 p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col justify-between">
+            <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+              <span className="font-semibold uppercase tracking-wider text-[11px]">Air-Fuel Ratio (AFR)</span>
+              <Zap className="w-4 h-4 text-emerald-500" />
+            </div>
+            <div className="my-1">
+              <div className="text-3xl font-extrabold font-mono text-slate-900">
+                {dedicated.exactStoichiometricAfr}:1
+              </div>
+              <div className="text-[11px] text-slate-600 font-medium mt-0.5">
+                Demands <strong className="text-blue-700">+{dedicated.exactFuelMassIncreasePct}%</strong> extra fuel injection
+              </div>
+            </div>
+            <div className="text-[11px] text-slate-400 border-t border-slate-100 pt-1.5 mt-1">
+              Stoichiometric balance for closed-loop ECU
+            </div>
+          </div>
+
+          {/* Card 6: Estimated Fuel Spend Impact */}
+          <div className="bg-white/95 p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col justify-between">
+            <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+              <span className="font-semibold uppercase tracking-wider text-[11px]">Extra Spend / 1,000 km</span>
+              <Coins className="w-4 h-4 text-amber-600" />
+            </div>
+            <div className="my-1">
+              <div className="text-3xl font-extrabold font-mono text-slate-900">
+                +₹{dedicated.estimatedExtraCostPer1000km}
+              </div>
+              <div className="text-[11px] text-slate-600 font-medium mt-0.5">
+                From fuel energy density reduction
+              </div>
+            </div>
+            <div className="text-[11px] text-slate-400 border-t border-slate-100 pt-1.5 mt-1">
+              Calculated at average ₹96.72 / litre petrol
+            </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-white/90 p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col justify-center">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
-              Estimated Mileage Change
-            </span>
-            <div className="text-3xl font-extrabold font-mono text-slate-900 my-1">
-              {analysis.mileageAndEconomyConsequences.estimatedMileageChangePct}
-            </div>
-            <span className="text-xs text-slate-500">
-              vs Pure E0 Petrol
-            </span>
-          </div>
-
-          <div className="md:col-span-2 bg-white/90 p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col justify-center space-y-1.5">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
-              What This Means On The Road
-            </span>
-            <p className="text-xs text-slate-700 leading-relaxed font-medium">
-              {analysis.mileageAndEconomyConsequences.realWorldImpactSummary}
-            </p>
-            <p className="text-[11px] text-slate-400">
-              {analysis.mileageAndEconomyConsequences.energyDensityDrop}
-            </p>
-          </div>
+        {/* Real-world driving explanation */}
+        <div className="bg-white/90 p-4 rounded-xl border border-slate-200 shadow-xs">
+          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1">
+            Real-World Road Impact for E{ethanolPct}
+          </span>
+          <p className="text-xs text-slate-700 leading-relaxed font-medium">
+            {analysis.mileageAndEconomyConsequences.realWorldImpactSummary}
+          </p>
         </div>
       </div>
 

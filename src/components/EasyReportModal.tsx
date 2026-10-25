@@ -1,6 +1,7 @@
 import React from 'react';
 import { PetrolVehicle } from '../data/vehicles';
 import { AnalysisData } from './AiAnalysisResults';
+import { calculateDedicatedVehicleFuelMetrics } from '../utils/fuelPhysics';
 import {
   X,
   CheckCircle2,
@@ -12,6 +13,7 @@ import {
   Droplets,
   Printer,
   HelpCircle,
+  Coins,
 } from 'lucide-react';
 
 interface EasyReportModalProps {
@@ -35,11 +37,8 @@ export const EasyReportModal: React.FC<EasyReportModalProps> = ({
   const isCaution = analysis.suitabilityVerdict === 'CONDITIONAL_CAUTION';
   const isHazard = analysis.suitabilityVerdict === 'INCOMPATIBLE_HAZARD';
 
-  // Simplified mileage estimate in km/L
-  const baselineKml = parseFloat(vehicle.estimatedCityHighwayMpg) || 20;
-  const penaltyPct = Math.abs(parseFloat(analysis.mileageAndEconomyConsequences.estimatedMileageChangePct)) || 4;
-  const newKml = (baselineKml * (1 - penaltyPct / 100)).toFixed(1);
-  const diffKml = (baselineKml - parseFloat(newKml)).toFixed(1);
+  // Dedicated exact metrics
+  const dedicated = analysis.dedicatedMetrics || calculateDedicatedVehicleFuelMetrics(vehicle, ethanolPct);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200">
@@ -133,27 +132,46 @@ export const EasyReportModal: React.FC<EasyReportModalProps> = ({
           <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-3">
             <div className="flex items-center gap-2 text-slate-900 font-bold text-sm">
               <Gauge className="w-5 h-5 text-blue-600" />
-              <h4>1. How will it affect my mileage (average)?</h4>
+              <h4>1. How will E{ethanolPct} affect my mileage & fuel cost?</h4>
             </div>
 
-            <div className="bg-white p-4 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <span className="text-xs text-slate-500 font-medium">Expected Mileage Drop</span>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="bg-white p-3.5 rounded-xl border border-slate-200">
+                <span className="text-xs text-slate-500 font-medium">Exact Mileage Drop</span>
                 <div className="text-2xl font-bold text-slate-900 mt-0.5">
-                  {analysis.mileageAndEconomyConsequences.estimatedMileageChangePct}
+                  {dedicated.exactMileageDropPct}%
                 </div>
+                <span className="text-[11px] text-slate-400">vs pure E0 petrol</span>
               </div>
 
-              <div className="sm:text-right">
-                <span className="text-xs text-slate-500 font-medium">Kilometers per Liter</span>
-                <div className="text-sm font-semibold text-slate-800 mt-0.5">
-                  Drops by roughly <strong className="text-rose-600">~{diffKml} km/L</strong>
+              <div className="bg-white p-3.5 rounded-xl border border-slate-200">
+                <span className="text-xs text-slate-500 font-medium">Real-World Average</span>
+                <div className="text-xl font-bold text-blue-600 mt-0.5">
+                  {dedicated.exactMileageOnBlendKmpl} km/L
                 </div>
+                <span className="text-[11px] text-slate-500">
+                  from {dedicated.baselineMileageKmpl} km/L (-{dedicated.exactKmDropPerLiter} km/L)
+                </span>
               </div>
+
+              <div className="bg-white p-3.5 rounded-xl border border-slate-200">
+                <span className="text-xs text-slate-500 font-medium">Full Tank Range ({vehicle.tankCapacityLiters}L)</span>
+                <div className="text-xl font-bold text-slate-900 mt-0.5">
+                  {dedicated.exactRangeOnBlendKm} km
+                </div>
+                <span className="text-[11px] text-rose-600 font-semibold">
+                  -{dedicated.exactRangeLossKm} km per tank
+                </span>
+              </div>
+            </div>
+
+            <div className="p-3 bg-white rounded-xl border border-slate-200 text-xs text-slate-600 flex items-center justify-between">
+              <span>Estimated additional spend per 1,000 km driven:</span>
+              <span className="font-bold text-slate-900 font-mono">+₹{dedicated.estimatedExtraCostPer1000km}</span>
             </div>
 
             <p className="text-xs text-slate-600 leading-relaxed">
-              <strong>Why mileage drops:</strong> Ethanol has less chemical energy than pure petrol. Your engine has to burn slightly more fuel to produce the same pickup and power.
+              <strong>Why mileage drops:</strong> Ethanol holds less chemical energy (21.2 MJ/L) than pure petrol (32.4 MJ/L). At E{ethanolPct}, the blend contains {dedicated.exactEnergyDensityMjL} MJ/L, so the engine burns +{dedicated.exactFuelMassIncreasePct}% extra fuel to produce equivalent power.
             </p>
           </div>
 

@@ -82,3 +82,71 @@ export function calculateFuelPhysics(ethanolPct: number, baselineRon: number = 9
     reidVaporPressureClass: rvpClass,
   };
 }
+
+export interface DedicatedVehicleFuelMetrics {
+  ethanolPct: number;
+  petrolPct: number;
+  baselineMileageKmpl: number;
+  exactMileageOnBlendKmpl: number;
+  exactKmDropPerLiter: number;
+  exactMileageDropPct: number;
+  baselineRangeKm: number;
+  exactRangeOnBlendKm: number;
+  exactRangeLossKm: number;
+  exactEnergyDensityMjL: number;
+  exactEnergyDropPct: number;
+  exactOctaneRatingRon: number;
+  exactStoichiometricAfr: number;
+  exactFuelMassIncreasePct: number;
+  estimatedExtraCostPer1000km: number;
+  oemCeilingPct: number;
+  deltaFromCeilingPct: number;
+  statusLabel: string;
+}
+
+export function calculateDedicatedVehicleFuelMetrics(
+  vehicle: { estimatedCityHighwayMpg: string; tankCapacityLiters: number; oemEthanolCeilingPct: number },
+  ethanolPct: number
+): DedicatedVehicleFuelMetrics {
+  const physics = calculateFuelPhysics(ethanolPct);
+  const baselineKml = parseFloat(vehicle.estimatedCityHighwayMpg) || 20.0;
+  const tankCapacity = vehicle.tankCapacityLiters || 35;
+  const dropPct = Math.abs(physics.estimatedMileageImpactPct);
+  const exactMileage = Math.max(1, baselineKml * (1 - dropPct / 100));
+  const kmDrop = Math.max(0, baselineKml - exactMileage);
+  const baseRange = Math.round(baselineKml * tankCapacity);
+  const blendRange = Math.round(exactMileage * tankCapacity);
+  const rangeLoss = Math.max(0, baseRange - blendRange);
+
+  // Extra cost per 1000km at ~₹96.72 / liter
+  const litersBase = 1000 / baselineKml;
+  const litersBlend = 1000 / exactMileage;
+  const extraCost = Math.max(0, Math.round((litersBlend - litersBase) * 96.72));
+
+  const oemCeiling = vehicle.oemEthanolCeilingPct ?? 10;
+  const delta = ethanolPct - oemCeiling;
+
+  return {
+    ethanolPct,
+    petrolPct: 100 - ethanolPct,
+    baselineMileageKmpl: Number(baselineKml.toFixed(1)),
+    exactMileageOnBlendKmpl: Number(exactMileage.toFixed(1)),
+    exactKmDropPerLiter: Number(kmDrop.toFixed(1)),
+    exactMileageDropPct: Number((-dropPct).toFixed(1)),
+    baselineRangeKm: baseRange,
+    exactRangeOnBlendKm: blendRange,
+    exactRangeLossKm: rangeLoss,
+    exactEnergyDensityMjL: physics.energyDensityMjL,
+    exactEnergyDropPct: physics.energyDeficitPct,
+    exactOctaneRatingRon: physics.octaneBoostEstRon,
+    exactStoichiometricAfr: physics.stoichiometricAfr,
+    exactFuelMassIncreasePct: physics.fuelMassIncreaseRequiredPct,
+    estimatedExtraCostPer1000km: extraCost,
+    oemCeilingPct: oemCeiling,
+    deltaFromCeilingPct: delta,
+    statusLabel: delta <= 0
+      ? `Within Safe Factory Limit (${Math.abs(delta)}% headroom)`
+      : `Exceeds Factory Limit by exactly +${delta}%`,
+  };
+}
+

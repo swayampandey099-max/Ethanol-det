@@ -258,6 +258,26 @@ export const AppleEthanolSection: React.FC<AppleEthanolSectionProps> = ({
           onChange={(e) => onChangeEthanol(Number(e.target.value))}
           className="w-full"
         />
+
+        {/* Dedicated Live Blend Telemetry */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-200/60 text-[11px]">
+          <div className="p-2 rounded-lg bg-white/70 border border-slate-200/70">
+            <span className="text-slate-400 block text-[10px] uppercase font-semibold">Exact Mileage Drop</span>
+            <span className="font-bold text-slate-900 font-mono">{physics.estimatedMileageImpactPct}%</span>
+          </div>
+          <div className="p-2 rounded-lg bg-white/70 border border-slate-200/70">
+            <span className="text-slate-400 block text-[10px] uppercase font-semibold">Energy Density</span>
+            <span className="font-bold text-slate-900 font-mono">{physics.energyDensityMjL} MJ/L</span>
+          </div>
+          <div className="p-2 rounded-lg bg-white/70 border border-slate-200/70">
+            <span className="text-slate-400 block text-[10px] uppercase font-semibold">Blended Octane</span>
+            <span className="font-bold text-amber-700 font-mono">{physics.octaneBoostEstRon} RON</span>
+          </div>
+          <div className="p-2 rounded-lg bg-white/70 border border-slate-200/70">
+            <span className="text-slate-400 block text-[10px] uppercase font-semibold">Stoichiometric AFR</span>
+            <span className="font-bold text-blue-700 font-mono">{physics.stoichiometricAfr}:1</span>
+          </div>
+        </div>
       </div>
 
       {/* Live Compatibility Status Banner */}

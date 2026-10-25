@@ -80,8 +80,25 @@ function getDeterministicAnalysis(vehicle: any, ethanolPct: number) {
   const oemCeiling = vehicle.oemEthanolCeilingPct ?? 10;
   const isOemApproved = ethanolPct <= oemCeiling;
   const isFlexFuel = oemCeiling >= 85;
-  const isExtremeExcess = ethanolPct > (oemCeiling + 15);
   const isClassicCar = vehicle.category === 'Classic' || vehicle.fuelInjection.includes('Early') || vehicle.fuelInjection.includes('Carbureted');
+
+  const fraction = Math.max(0, Math.min(100, ethanolPct)) / 100;
+  const gasolineMjL = 32.4;
+  const ethanolMjL = 21.2;
+  const energyDensity = (1 - fraction) * gasolineMjL + fraction * ethanolMjL;
+  const energyDeficit = ((gasolineMjL - energyDensity) / gasolineMjL) * 100;
+  const exactMileageDrop = fraction <= 0.10 ? energyDeficit * 0.95 : fraction <= 0.20 ? energyDeficit * 0.98 : energyDeficit;
+  const baselineKml = parseFloat(vehicle.estimatedCityHighwayMpg) || 20.0;
+  const tankCapacity = vehicle.tankCapacityLiters || 35;
+  const exactMileage = Math.max(1, baselineKml * (1 - exactMileageDrop / 100));
+  const kmDrop = Math.max(0, baselineKml - exactMileage);
+  const baseRange = Math.round(baselineKml * tankCapacity);
+  const blendRange = Math.round(exactMileage * tankCapacity);
+  const rangeLoss = Math.max(0, baseRange - blendRange);
+  const stoichAfr = (1 - fraction) * 14.7 + fraction * 9.0;
+  const extraFuelPct = ((14.7 / stoichAfr) - 1) * 100;
+  const exactRon = 91 + fraction * (108 - 91) * 0.75;
+  const deltaFromCeiling = ethanolPct - oemCeiling;
 
   let verdict: 'FULLY_COMPATIBLE' | 'CONDITIONAL_CAUTION' | 'INCOMPATIBLE_HAZARD';
   let verdictLabel: string;
@@ -89,46 +106,37 @@ function getDeterministicAnalysis(vehicle: any, ethanolPct: number) {
 
   if (isFlexFuel || (isOemApproved && !isClassicCar)) {
     verdict = 'FULLY_COMPATIBLE';
-    verdictLabel = `OEM Approved (${ethanolPct}% is within the ${vehicle.oemMaxEthanolRating} limit)`;
-    score = 94 - Math.round(ethanolPct * 0.15);
+    verdictLabel = `Dedicated Approval for E${ethanolPct} (${vehicle.oemMaxEthanolRating} Certified · ${Math.abs(deltaFromCeiling)}% Headroom)`;
+    score = Math.max(82, 96 - Math.round(ethanolPct * 0.12));
   } else if (isClassicCar && ethanolPct > 5) {
     verdict = 'INCOMPATIBLE_HAZARD';
     verdictLabel = `High Hazard for Vintage Fuel Components (Exceeds safe E0/E5 threshold)`;
-    score = Math.max(10, 45 - ethanolPct * 0.5);
+    score = Math.max(8, 42 - Math.round(ethanolPct * 0.45));
   } else if (ethanolPct <= oemCeiling + 5) {
     verdict = 'CONDITIONAL_CAUTION';
-    verdictLabel = `Marginal Tolerance (${ethanolPct}% slightly exceeds ${vehicle.oemMaxEthanolRating} OEM rating)`;
-    score = 65;
+    verdictLabel = `Marginal Tolerance for E${ethanolPct} (Exceeds ${vehicle.oemMaxEthanolRating} limit by exactly +${deltaFromCeiling}%)`;
+    score = Math.max(55, 68 - deltaFromCeiling * 2);
   } else {
     verdict = 'INCOMPATIBLE_HAZARD';
-    verdictLabel = `Severe Mismatch (${ethanolPct}% exceeds factory ${vehicle.oemMaxEthanolRating} ceiling by ${ethanolPct - oemCeiling}%)`;
-    score = Math.max(15, 55 - (ethanolPct - oemCeiling) * 1.5);
+    verdictLabel = `Severe Mismatch for E${ethanolPct} (Exceeds ${vehicle.oemMaxEthanolRating} ceiling by +${deltaFromCeiling}%)`;
+    score = Math.max(12, 54 - deltaFromCeiling * 1.4);
   }
-
-  const mileageDropRange = ethanolPct <= 10
-    ? '2.5% to 4.0%'
-    : ethanolPct <= 20
-    ? '5.0% to 7.5%'
-    : ethanolPct <= 50
-    ? '12% to 18%'
-    : '24% to 30%';
 
   return {
     suitabilityVerdict: verdict,
     verdictLabel,
     headlineSummary: isOemApproved
-      ? `${vehicle.make} ${vehicle.model} (${vehicle.variant}) operates safely on E${ethanolPct} with OEM compliance.`
-      : `E${ethanolPct} exceeds ${vehicle.make}'s factory specification of ${vehicle.oemMaxEthanolRating}. Increased mechanical wear and fuel trim saturation risk.`,
+      ? `Dedicated result for E${ethanolPct}: Your ${vehicle.make} ${vehicle.model} (${vehicle.variant}) is factory designed to run safely on E${ethanolPct} with OEM warranty compliance.`
+      : `Dedicated result for E${ethanolPct}: Operating ${vehicle.model} on E${ethanolPct} exceeds factory design limits (${vehicle.oemMaxEthanolRating}) by +${deltaFromCeiling}%. Increased fuel pump friction, lean fuel trim risk, and accelerated seal aging.`,
     engineSafetyRecommendations: [
       ethanolPct > oemCeiling
-        ? 'Dilute immediately with Pure Gasoline (E0) or certified low-blend premium fuel to restore fuel trim balance.'
+        ? `Dilute immediately with pure petrol (E0/E5) to bring the ethanol blend below ${vehicle.oemMaxEthanolRating}.`
         : `Continue using recommended octane (${vehicle.oemOctaneRecommendation}) with quality top-tier detergents.`,
       isClassicCar
-        ? 'Retrofit fuel lines with modern Viton fluoroelastomer hoses (SAE J30 R9 or R14 spec) and install an ethanol-resistant fuel pump.'
+        ? 'Retrofit fuel lines with modern Viton fluoroelastomer hoses (SAE J30 R9 spec) and install an ethanol-resistant fuel pump.'
         : 'Avoid storing the vehicle parked for longer than 3-4 weeks with high-ethanol fuel due to atmospheric water absorption.',
-      ethanolPct > 15 && !isFlexFuel
-        ? 'Monitor for OBD-II fault codes P0171 / P0174 (System Too Lean) on bank 1 and bank 2 as ECU long-term fuel trims approach max authority.'
-        : 'Adhere to OEM oil change intervals to prevent unburned ethanol blow-by from acidifying crankcase oil.',
+      `Dedicated fuel octane rating: E${ethanolPct} yields ${exactRon.toFixed(1)} RON, improving knock resistance under high load.`,
+      'Adhere to OEM oil change intervals to prevent unburned ethanol blow-by from acidifying crankcase oil.',
       'Check fuel filter and fuel pressure sensor regularly; replace filter if any micro-corrosion sediment forms in tank.'
     ],
     fuelDeliveryAndMaterialsIssues: [
@@ -136,54 +144,76 @@ function getDeterministicAnalysis(vehicle: any, ethanolPct: number) {
         component: 'High-Pressure Fuel Pump & Seals',
         riskLevel: ethanolPct > oemCeiling ? 'High' : 'Low',
         explanation: ethanolPct > oemCeiling
-          ? 'Ethanol has lower lubricating viscosity than raw hydrocarbons. High-pressure pump plungers and nitrile seals suffer accelerated mechanical scoring.'
-          : 'Factory seals are rated for OEM ethanol specifications without swelling or embrittlement.'
+          ? `At E${ethanolPct}, lower lubricating viscosity increases pump plunger friction and duty cycle by +${extraFuelPct.toFixed(1)}%.`
+          : `Factory seals and pump plungers are rated for E${ethanolPct} (${vehicle.oemMaxEthanolRating} certified).`
       },
       {
         component: 'Fuel Injectors & Orifices',
         riskLevel: ethanolPct > oemCeiling ? 'Moderate' : 'Low',
-        explanation: 'Ethanol is polar and conductive; in high concentrations it promotes galvanic micro-corrosion across injector needle seats and causes tip lacquer formation.'
+        explanation: `E${ethanolPct} requires +${extraFuelPct.toFixed(1)}% extra injector pulse duration to maintain stoichiometric air-fuel ratio.`
       },
       {
         component: 'Fuel Tank & Sender Unit',
         riskLevel: isClassicCar && ethanolPct > 5 ? 'Critical' : ethanolPct > oemCeiling ? 'Moderate' : 'Negligible',
         explanation: isClassicCar
-          ? 'Uncoated metal tanks and brass float assemblies oxidize rapidly, shedding rust particles into the primary fuel filter.'
-          : 'Modern polymer tanks are immune to rust, though fuel sender resistive traces can suffer accelerated oxidation.'
+          ? 'Uncoated vintage metal tanks oxidize rapidly in presence of alcohol.'
+          : 'Modern polymer tanks are immune to rust, though sender resistive traces require sealed contacts.'
       }
     ],
     combustionAndEcuIssues: [
       {
         parameter: 'Stoichiometric Fuel Trim (STFT / LTFT)',
-        consequence: `E${ethanolPct} requires ${(14.7 / ((1 - ethanolPct/100)*14.7 + (ethanolPct/100)*9.0) - 1).toFixed(1)}% extra fuel volume. If ECU fuel trim range is capped at ±15-20%, engine will run excessively lean under wide-open throttle.`
+        consequence: `E${ethanolPct} requires exactly +${extraFuelPct.toFixed(1)}% extra fuel volume (${stoichAfr.toFixed(2)}:1 AFR). Modern ECU trims adapt within ±15% range.`
       },
       {
         parameter: 'Exhaust Gas Temperature (EGT) & Catalytic Converter',
         consequence: ethanolPct > oemCeiling
           ? 'Lean combustion cycles elevate cylinder head temperatures and catalytic converter bed temperatures, risking thermal stress.'
-          : 'Ethanol combustion produces slightly cooler flame front, maintaining healthy catalytic converter operation within OEM limits.'
+          : `Combustion for E${ethanolPct} maintains healthy catalytic converter temperatures within OEM limits.`
       }
     ],
     mileageAndEconomyConsequences: {
-      estimatedMileageChangePct: `-${mileageDropRange}`,
-      energyDensityDrop: `Approx ${((32.4 - ((1 - ethanolPct/100)*32.4 + (ethanolPct/100)*21.2))/32.4 * 100).toFixed(1)}% reduction in volumetric energy density compared to pure gasoline.`,
-      realWorldImpactSummary: `Expect ${mileageDropRange} fewer kilometers or miles per full tank. The vehicle must inject more fuel mass to deliver equivalent combustion energy.`
+      estimatedMileageChangePct: `-${exactMileageDrop.toFixed(1)}%`,
+      energyDensityDrop: `Dedicated ${energyDeficit.toFixed(1)}% reduction in volumetric energy density (${energyDensity.toFixed(2)} MJ/L vs 32.4 MJ/L on pure E0 petrol).`,
+      realWorldImpactSummary: `Expect an exact drop of -${kmDrop.toFixed(1)} km/L (from ${baselineKml.toFixed(1)} to ${exactMileage.toFixed(1)} km/L). Driving range drops from ${baseRange} km to ${blendRange} km on a full ${tankCapacity}L tank (-${rangeLoss} km).`
     },
     coldStartAndVaporConcerns: ethanolPct >= 20
-      ? 'Ethanol has an exceptionally high latent heat of vaporization (904 kJ/kg vs 350 kJ/kg for petrol). Ambient temperatures below 12°C (54°F) will result in extended cranking or cold-idle stumbling.'
-      : 'Cold morning ignition and vapor lock characteristics remain within standard factory operating thresholds.',
+      ? `E${ethanolPct} has high latent heat of vaporization. Ambient temperatures below 12°C will result in slightly extended cranking.`
+      : `Cold morning ignition and throttle response for E${ethanolPct} remain within standard factory operating thresholds.`,
     longTermMaintenanceWarnings: [
-      'Engine oil dilution: Unburned ethanol can wash cylinder walls during cold cycles and dilute the lubricating oil film.',
-      'Shorter spark plug service life due to varying thermal flame propagation and additive deposits.',
-      'Phase separation sludge: If water enters the tank, the ethanol-water layer will sink to the bottom directly into the pump strainer.'
+      `Moisture absorption: E${ethanolPct} separates from petrol if stored in tank over 30 days without stabilizer.`,
+      'Engine oil dilution: Unburned ethanol can wash cylinder walls during cold cycles.',
+      'Sediment wash: High alcohol percentage cleans old tank varnishes directly into the fuel filter.'
     ],
     phaseSeparationAndStorage: ethanolPct > 10
-      ? 'Hygroscopic hazard: Fuel will absorb moisture from air humidity. Do not keep in tank beyond 30-45 days without ethanol-rated fuel stabilizer.'
-      : 'Fuel remains stable for up to 90 days under sealed fuel tank vapor containment systems.',
+      ? `Hygroscopic hazard: Do not keep E${ethanolPct} in tank beyond 30-45 days without ethanol-rated fuel stabilizer.`
+      : `Fuel remains stable for up to 90 days under sealed fuel tank vapor containment systems.`,
     technicalGradeScore: score,
     recommendedAction: isOemApproved
-      ? 'Safe to refuel. No corrective measures required. Follow standard OEM scheduled maintenance.'
-      : `Avoid continuous use of E${ethanolPct}. If filled accidentally, avoid heavy acceleration and top off with 100% pure gasoline (E0) or low-blend premium fuel at the next opportunity.`
+      ? `Safe to refuel with E${ethanolPct}. No corrective measures required. Follow standard OEM scheduled maintenance.`
+      : `Avoid continuous use of E${ethanolPct}. If filled accidentally, avoid heavy acceleration and top off with pure gasoline (E0) or low-blend premium fuel when tank reaches half-empty.`,
+    dedicatedMetrics: {
+      ethanolPct,
+      petrolPct: 100 - ethanolPct,
+      baselineMileageKmpl: Number(baselineKml.toFixed(1)),
+      exactMileageOnBlendKmpl: Number(exactMileage.toFixed(1)),
+      exactKmDropPerLiter: Number(kmDrop.toFixed(1)),
+      exactMileageDropPct: Number((-exactMileageDrop).toFixed(1)),
+      baselineRangeKm: baseRange,
+      exactRangeOnBlendKm: blendRange,
+      exactRangeLossKm: rangeLoss,
+      exactEnergyDensityMjL: Number(energyDensity.toFixed(2)),
+      exactEnergyDropPct: Number(energyDeficit.toFixed(1)),
+      exactOctaneRatingRon: Number(exactRon.toFixed(1)),
+      exactStoichiometricAfr: Number(stoichAfr.toFixed(2)),
+      exactFuelMassIncreasePct: Number(extraFuelPct.toFixed(1)),
+      estimatedExtraCostPer1000km: Math.round(((1000 / exactMileage) - (1000 / baselineKml)) * 96.72),
+      oemCeilingPct: oemCeiling,
+      deltaFromCeilingPct: deltaFromCeiling,
+      statusLabel: deltaFromCeiling <= 0
+        ? `Within Safe Factory Limit (${Math.abs(deltaFromCeiling)}% headroom)`
+        : `Exceeds Factory Limit by exactly +${deltaFromCeiling}%`,
+    }
   };
 }
 
@@ -235,7 +265,7 @@ TECHNICAL EVALUATION CRITERIA:
 2. Engine Safety Recommendations: Practical engineering steps, fuel stabilizers, dilution, or maintenance checks.
 3. Fuel Delivery & Materials Issues: Specific impact on high-pressure pump (HPFP), rubber hoses, Viton vs Buna-N seals, tank coating, injectors.
 4. Combustion & ECU Issues: Fuel trim limits, stoichiometric Air-Fuel Ratio (AFR) shift (gasoline 14.7:1 vs ethanol 9.0:1), knock resistance (RON), lean misfire risks, catalytic converter and EGT implications.
-5. Mileage & Fuel Economy: Exact calculated degradation in volumetric energy density and realistic percentage drop in MPG / km per liter.
+5. Mileage & Fuel Economy: MUST provide an EXACT single percentage drop (e.g. "-5.2%"), NEVER a range like "2.5% to 4.0%". Compute exact drop based on fuel volumetric energy density (-34.5% * ethanolFraction). Include exact km/L impact.
 6. Cold Start & Vapor Lock: Latent heat of vaporization issues (904 kJ/kg for ethanol vs 350 kJ/kg for gasoline) and Reid Vapor Pressure.
 7. Long-term Maintenance Warnings: Phase separation risk, oil dilution/washdown, corrosion, and sensor longevity.
 8. Technical Grade Score: 0 to 100 rating of mechanical alignment.
@@ -243,9 +273,12 @@ TECHNICAL EVALUATION CRITERIA:
 
 Provide your response strictly in the specified JSON format with keys: suitabilityVerdict, verdictLabel, headlineSummary, engineSafetyRecommendations, fuelDeliveryAndMaterialsIssues, combustionAndEcuIssues, mileageAndEconomyConsequences, coldStartAndVaporConcerns, longTermMaintenanceWarnings, phaseSeparationAndStorage, technicalGradeScore, recommendedAction.`;
 
+    const deterministic = getDeterministicAnalysis(vehicle, pct);
+
     // 1. Try Groq AI (with user provided key)
     const groqResult = await callGroqAi(prompt);
     if (groqResult) {
+      groqResult.dedicatedMetrics = deterministic.dedicatedMetrics;
       return res.json({ analysis: groqResult, source: 'groq-ai' });
     }
 
@@ -351,6 +384,7 @@ Provide your response strictly in the specified JSON format with keys: suitabili
       const textOutput = response.text;
       if (textOutput) {
         const parsedJson = JSON.parse(textOutput);
+        parsedJson.dedicatedMetrics = deterministic.dedicatedMetrics;
         return res.json({ analysis: parsedJson, source: 'gemini-ai' });
       }
     }

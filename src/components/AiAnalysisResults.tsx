@@ -15,6 +15,7 @@ import {
   FileText,
   AlertOctagon,
 } from 'lucide-react';
+import { DedicatedVehicleFuelMetrics } from '../utils/fuelPhysics';
 
 export interface AnalysisData {
   suitabilityVerdict: 'FULLY_COMPATIBLE' | 'CONDITIONAL_CAUTION' | 'INCOMPATIBLE_HAZARD';
@@ -40,6 +41,7 @@ export interface AnalysisData {
   phaseSeparationAndStorage: string;
   technicalGradeScore: number;
   recommendedAction: string;
+  dedicatedMetrics?: DedicatedVehicleFuelMetrics;
 }
 
 interface AiAnalysisResultsProps {

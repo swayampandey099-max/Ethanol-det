@@ -7,10 +7,12 @@ import { EasyReportModal } from './components/EasyReportModal';
 import { DriftingCarLoader } from './components/DriftingCarLoader';
 import { PETROL_VEHICLES, PetrolVehicle } from './data/vehicles';
 import { AnalysisData } from './components/AiAnalysisResults';
+import { calculateDedicatedVehicleFuelMetrics } from './utils/fuelPhysics';
 import { Fuel, Activity, Layers, RotateCcw, FileText, Zap } from 'lucide-react';
 
-// Client-side instant evaluation to prevent ANY visual flicker or screen jump
+// Client-side instant evaluation with dedicated exact metrics for the selected ethanol level
 function getLocalPowertrainEvaluation(vehicle: PetrolVehicle, ethanolPct: number): AnalysisData {
+  const dedicated = calculateDedicatedVehicleFuelMetrics(vehicle, ethanolPct);
   const oemCeiling = vehicle.oemEthanolCeilingPct ?? 10;
   const isOemApproved = ethanolPct <= oemCeiling;
   const isFlexFuel = oemCeiling >= 85;
@@ -22,43 +24,36 @@ function getLocalPowertrainEvaluation(vehicle: PetrolVehicle, ethanolPct: number
 
   if (isFlexFuel || (isOemApproved && !isClassicOrPreBs6)) {
     verdict = 'FULLY_COMPATIBLE';
-    verdictLabel = `Factory Certified (Safe up to ${vehicle.oemMaxEthanolRating})`;
-    score = Math.max(80, 95 - Math.round(ethanolPct * 0.1));
+    verdictLabel = `Dedicated Approval for E${ethanolPct} (${vehicle.oemMaxEthanolRating} Certified · ${Math.abs(dedicated.deltaFromCeilingPct)}% Headroom)`;
+    score = Math.max(82, 98 - Math.round(ethanolPct * 0.12));
   } else if (isClassicOrPreBs6 && ethanolPct > 5) {
     verdict = 'INCOMPATIBLE_HAZARD';
-    verdictLabel = `Severe Hazard for Carburetor & Older Rubber Lines`;
-    score = Math.max(10, 40 - Math.round(ethanolPct * 0.4));
+    verdictLabel = `Severe Hazard for E${ethanolPct} (Vintage Carburetor & Nitrile Rubber Vulnerability)`;
+    score = Math.max(8, 40 - Math.round(ethanolPct * 0.45));
   } else if (ethanolPct <= oemCeiling + 5) {
     verdict = 'CONDITIONAL_CAUTION';
-    verdictLabel = `Marginal Tolerance (${ethanolPct}% slightly exceeds ${vehicle.oemMaxEthanolRating} limit)`;
-    score = 65;
+    verdictLabel = `Marginal Tolerance for E${ethanolPct} (Exceeds ${vehicle.oemMaxEthanolRating} limit by exactly +${dedicated.deltaFromCeilingPct}%)`;
+    score = Math.max(55, 68 - dedicated.deltaFromCeilingPct * 2);
   } else {
     verdict = 'INCOMPATIBLE_HAZARD';
-    verdictLabel = `Non-Compliant (Exceeds factory limit by +${ethanolPct - oemCeiling}%)`;
-    score = Math.max(15, 50 - (ethanolPct - oemCeiling));
+    verdictLabel = `Non-Compliant for E${ethanolPct} (Exceeds ${vehicle.oemMaxEthanolRating} ceiling by +${dedicated.deltaFromCeilingPct}%)`;
+    score = Math.max(12, 54 - dedicated.deltaFromCeilingPct * 1.4);
   }
-
-  const dropPct = ethanolPct <= 10
-    ? '2.5% to 4.0%'
-    : ethanolPct <= 20
-    ? '4.5% to 6.8%'
-    : ethanolPct <= 50
-    ? '12% to 17%'
-    : '24% to 29%';
 
   return {
     suitabilityVerdict: verdict,
     verdictLabel,
     headlineSummary: isOemApproved
-      ? `${vehicle.make} ${vehicle.model} (${vehicle.variant}) is factory designed to run smoothly on E${ethanolPct} fuel with full component reliability.`
-      : `Operating ${vehicle.model} on E${ethanolPct} exceeds factory design limits (${vehicle.oemMaxEthanolRating}). Risk of fuel pump wear, lean engine codes, and hose hardening.`,
+      ? `Dedicated evaluation for E${ethanolPct}: Your ${vehicle.make} ${vehicle.model} (${vehicle.variant}) is factory rated up to ${vehicle.oemMaxEthanolRating}. Running on ${ethanolPct}% ethanol maintains engine reliability, valve seat protection, and full injector longevity.`
+      : `Dedicated evaluation for E${ethanolPct}: Operating ${vehicle.model} on E${ethanolPct} exceeds factory design limits (${vehicle.oemMaxEthanolRating}) by +${dedicated.deltaFromCeilingPct}%. Increased fuel pump friction, lean fuel trim risk, and accelerated seal aging.`,
     engineSafetyRecommendations: [
       ethanolPct > oemCeiling
-        ? 'Dilute the tank with pure petrol (E0/E5) or certified low-blend fuel at your next refill.'
+        ? `Dilute the fuel tank with pure petrol (E0/E5) or certified low-blend petrol to bring the blend back below ${vehicle.oemMaxEthanolRating}.`
         : `Use recommended fuel grade (${vehicle.oemOctaneRecommendation}) from high-volume verified pumps.`,
       isClassicOrPreBs6
         ? 'Upgrade old rubber fuel hoses to ethanol-rated fluoroelastomer lines (SAE J30 R9 spec) and clean carburetor needle seats regularly.'
         : 'Avoid letting fuel sit unused in the tank for longer than 3-4 weeks due to atmospheric moisture absorption.',
+      `Dedicated spark timing: E${ethanolPct} provides ${dedicated.exactOctaneRatingRon} RON octane rating, resisting knock under heavy throttle.`,
       'Maintain timely engine oil changes to prevent unburned ethanol blow-by from thinning the crankcase oil.',
       'Check the fuel filter and fuel tank cap seal during regular service.'
     ],
@@ -67,54 +62,55 @@ function getLocalPowertrainEvaluation(vehicle: PetrolVehicle, ethanolPct: number
         component: 'Fuel Pump & Injectors',
         riskLevel: ethanolPct > oemCeiling ? 'High' : 'Low',
         explanation: ethanolPct > oemCeiling
-          ? 'Ethanol has lower lubricating viscosity than petrol; prolonged high-blend use increases friction on pump plungers.'
-          : 'Fuel pump components and injector seals are rated for this blend without damage.'
+          ? `At E${ethanolPct}, lower lubricating viscosity increases plunger friction and duty cycle by +${dedicated.exactFuelMassIncreasePct}%.`
+          : `Fuel pump components and injector seals are rated for E${ethanolPct} (${vehicle.oemMaxEthanolRating} certified).`
       },
       {
         component: 'Rubber Lines & Gaskets',
         riskLevel: isClassicOrPreBs6 && ethanolPct > 5 ? 'Critical' : ethanolPct > oemCeiling ? 'Moderate' : 'Low',
         explanation: isClassicOrPreBs6
-          ? 'Older pre-2020 nitrile rubber lines stiffen and crack in presence of alcohol, presenting fuel leak risk.'
-          : 'Modern synthetic elastomer lines prevent fuel permeation and swelling.'
+          ? `Pre-BS6 rubber hoses harden and weep in presence of ${ethanolPct}% alcohol.`
+          : `Modern fluoropolymer lines handle E${ethanolPct} without swelling or permeation.`
       },
       {
         component: 'Fuel Tank & Sender Unit',
         riskLevel: ethanolPct > oemCeiling ? 'Moderate' : 'Negligible',
-        explanation: 'Ethanol is conductive; moisture absorption can cause surface oxidation on metallic float sensors in older tanks.'
+        explanation: `Conductivity of E${ethanolPct} requires sealed sender resistive tracks to prevent oxidation over time.`
       }
     ],
     combustionAndEcuIssues: [
       {
         parameter: 'Air-Fuel Mixture & Fuel Trims',
-        consequence: `E${ethanolPct} requires extra fuel volume to maintain stoichiometric balance. Modern ECU trims adapt within ±15% range.`
+        consequence: `E${ethanolPct} requires exactly +${dedicated.exactFuelMassIncreasePct}% extra fuel volume to maintain stoichiometric balance (${dedicated.exactStoichiometricAfr}:1 AFR). Modern ECU trims adapt within ±15% range.`
       },
       {
         parameter: 'Exhaust & Catalytic Converter',
         consequence: isOemApproved
-          ? 'Exhaust gas temperatures remain within standard factory thermal thresholds.'
-          : 'Excessive lean operation can elevate exhaust manifold temperatures under heavy throttle load.'
+          ? `Exhaust gas temperatures for E${ethanolPct} remain within standard factory thermal thresholds.`
+          : `Lean combustion from high alcohol percentage can elevate exhaust manifold temperatures under sustained load.`
       }
     ],
     mileageAndEconomyConsequences: {
-      estimatedMileageChangePct: `-${dropPct}`,
-      energyDensityDrop: `Approx ${((32.4 - ((1 - ethanolPct/100)*32.4 + (ethanolPct/100)*21.2))/32.4 * 100).toFixed(1)}% reduction in fuel energy density compared to pure petrol.`,
-      realWorldImpactSummary: `Expect ${dropPct} fewer kilometers per liter. The engine burns slightly more volume to match standard petrol output.`
+      estimatedMileageChangePct: `${dedicated.exactMileageDropPct}%`,
+      energyDensityDrop: `Dedicated ${dedicated.exactEnergyDropPct}% reduction in volumetric energy density (${dedicated.exactEnergyDensityMjL} MJ/L vs 32.4 MJ/L on pure E0 petrol).`,
+      realWorldImpactSummary: `Expect an exact drop of -${dedicated.exactKmDropPerLiter} km/L in fuel efficiency (from ${dedicated.baselineMileageKmpl} km/L to ${dedicated.exactMileageOnBlendKmpl} km/L). Driving range drops from ${dedicated.baselineRangeKm} km to ${dedicated.exactRangeOnBlendKm} km on a full ${vehicle.tankCapacityLiters}L tank (-${dedicated.exactRangeLossKm} km).`
     },
     coldStartAndVaporConcerns: ethanolPct >= 20
-      ? 'Ethanol requires more heat to vaporize (904 kJ/kg). In cold winter mornings below 12°C, expect a slightly longer crank time.'
-      : 'Cold morning ignition and throttle response remain within standard factory operating limits.',
+      ? `E${ethanolPct} requires high vaporization energy. In cold winter mornings below 12°C, expect a slightly longer crank time.`
+      : `Cold morning ignition and throttle response for E${ethanolPct} remain within standard factory operating limits.`,
     longTermMaintenanceWarnings: [
-      'Moisture absorption: Water separates from ethanol if left parked for extended periods.',
-      'Engine oil dilution: Cold running unburned fuel can wash cylinder walls over time.',
-      'Fuel filter sediment: High alcohol cleans old tank deposits into the fuel filter.'
+      `Moisture absorption: E${ethanolPct} separates from petrol if stored in tank over 30 days.`,
+      `Engine oil dilution: Unburned alcohol from cold starts can dilute cylinder wall lubrication.`,
+      `Sediment wash: Alcohol cleans old tank varnishes directly into the fuel filter.`
     ],
     phaseSeparationAndStorage: ethanolPct > 10
-      ? 'Water absorption risk: Do not store fuel in tank for over 30 days without running the engine.'
-      : 'Stable tank storage up to 60-90 days under normal atmospheric conditions.',
+      ? `Water absorption risk: Do not store E${ethanolPct} in tank for over 30 days without vehicle operation.`
+      : `Stable tank storage for E${ethanolPct} up to 60-90 days under normal atmospheric conditions.`,
     technicalGradeScore: score,
     recommendedAction: isOemApproved
-      ? 'Safe to refuel. No adjustments needed. Follow your normal scheduled maintenance.'
-      : `Avoid continuous use of E${ethanolPct}. If filled by mistake, drive gently and top off with standard petrol when tank reaches half-empty.`
+      ? `Safe to refuel with E${ethanolPct}. No adjustments needed. Follow your normal scheduled maintenance.`
+      : `Avoid continuous use of E${ethanolPct}. If filled by mistake, drive gently and top off with standard low-blend petrol when the tank reaches half-empty.`,
+    dedicatedMetrics: dedicated,
   };
 }
 
