@@ -1,0 +1,7 @@
+{
+  "name": "Ethanol Suitability & Fuel Analysis System",
+  "description": "Professional engineering diagnostics for petrol vehicle ethanol compatibility, engine safety recommendations, mileage degradation estimates, and material wear risks.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
