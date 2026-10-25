@@ -4,9 +4,10 @@ import { AppleEthanolSection } from './components/AppleEthanolSection';
 import { AppleResultsSection } from './components/AppleResultsSection';
 import { BlendComparisonModal } from './components/BlendComparisonModal';
 import { EasyReportModal } from './components/EasyReportModal';
+import { DriftingCarLoader } from './components/DriftingCarLoader';
 import { PETROL_VEHICLES, PetrolVehicle } from './data/vehicles';
 import { AnalysisData } from './components/AiAnalysisResults';
-import { Fuel, Activity, Layers, RotateCcw, FileText } from 'lucide-react';
+import { Fuel, Activity, Layers, RotateCcw, FileText, Zap } from 'lucide-react';
 
 // Client-side instant evaluation to prevent ANY visual flicker or screen jump
 function getLocalPowertrainEvaluation(vehicle: PetrolVehicle, ethanolPct: number): AnalysisData {
@@ -125,6 +126,7 @@ export default function App() {
     getLocalPowertrainEvaluation(PETROL_VEHICLES[0], 15)
   );
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [showLoader, setShowLoader] = useState<boolean>(true);
   const [isCompareModalOpen, setIsCompareModalOpen] = useState<boolean>(false);
   const [isEasyReportOpen, setIsEasyReportOpen] = useState<boolean>(false);
 
@@ -197,6 +199,14 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans relative selection:bg-blue-600 selection:text-white pb-16">
+      {/* Drifting Car Initial Loading Screen (< 3s) */}
+      {showLoader && (
+        <DriftingCarLoader
+          onFinish={() => setShowLoader(false)}
+          minDurationMs={2000}
+        />
+      )}
+
       {/* Ambient background subtle lighting */}
       <div className="fixed top-10 left-1/4 w-96 h-96 bg-blue-200/25 rounded-full blur-3xl pointer-events-none -z-10" />
       <div className="fixed bottom-20 right-1/4 w-96 h-96 bg-indigo-200/25 rounded-full blur-3xl pointer-events-none -z-10" />
@@ -235,6 +245,15 @@ export default function App() {
             >
               <Layers className="w-3.5 h-3.5 text-slate-600" />
               <span>Multi-Blend Matrix</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowLoader(true)}
+              className="p-2 rounded-full text-slate-500 hover:text-slate-800 bg-white hover:bg-slate-50 border border-slate-200 shadow-xs transition-all"
+              title="Replay drift animation"
+            >
+              <Zap className="w-3.5 h-3.5 text-blue-600" />
             </button>
 
             <button

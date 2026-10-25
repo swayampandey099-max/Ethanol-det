@@ -80,3 +80,74 @@ input[type=range]::-webkit-slider-thumb:active {
   transform: scale(0.96);
 }
 
+/* Drifting Car Animation Keyframes */
+@keyframes carDriftAcross {
+  0% {
+    transform: translate3d(-120%, 0, 0) rotate(1deg);
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  25% {
+    transform: translate3d(-30%, -4px, 0) rotate(-2deg);
+  }
+  50% {
+    transform: translate3d(25vw, 2px, 0) rotate(-3.5deg);
+  }
+  75% {
+    transform: translate3d(70vw, -3px, 0) rotate(-1.5deg);
+  }
+  95% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(calc(100vw + 120%), 0, 0) rotate(-2deg);
+    opacity: 0;
+  }
+}
+
+@keyframes skidReveal {
+  0% {
+    transform: scaleX(0);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.6;
+  }
+  80% {
+    transform: scaleX(1);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scaleX(1);
+    opacity: 0.2;
+  }
+}
+
+@keyframes smokePulse {
+  0% {
+    opacity: 0.3;
+    transform: scale(0.8) translate3d(0, 0, 0);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.2) translate3d(-20px, -10px, 0);
+  }
+  100% {
+    opacity: 0.2;
+    transform: scale(1.4) translate3d(-40px, -20px, 0);
+  }
+}
+
+.animate-car-drift {
+  animation: carDriftAcross 1.9s cubic-bezier(0.2, 0.8, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+
+.animate-skid-track {
+  animation: skidReveal 1.7s ease-out forwards;
+  transform-origin: left center;
+}
+
+
